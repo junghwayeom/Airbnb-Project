@@ -1,0 +1,239 @@
+---
+title: "How Location Affects Choosing Airbnb "
+author: "Jung Hwa Yeom"
+date: "12/10/2020"
+output:
+  pdf_document:
+    latex_engine: lualatex
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(ggplot2,stringr,rstan, ggcyto,
+  rstanarm,tidyverse,dplyr, arm, lme4, merTools)
+```
+
+
+```{r, echo=FALSE,warning=FALSE}
+#load data
+data <- read.csv("listings-4.csv", header=TRUE)
+```
+
+# Abstract
+  Customers’ choices and reviews are important for companies to predict future customers’ behaviors. Airbnb is a well-known company and shares its dataset of customers including reviews, location, etc. Based on the data, we can investigate what aspects impact customers to choose their accommodation during travel. In this project, I developed a linear mixed effects regression model to find how locations in Los Angeles affect the customers’ reviews. Moreover, I found the crime rate has not impacted the customers to select Airbnb.
+
+# Introduction
+  Airbnb is one of the most popular accommodation companies. It is different from a hotel because customers can use lodgings or homestays from hosts, so customers can fully experience the country’s culture. There are many aspects that affect customers to choose Airbnb such as locations, hosts, and previous reviews. In this project, I will mainly focus on locations. To be specific, I will investigate whether locations impact customers’ choices or not. If so, I will figure out whether the crime rate will negatively affect or not when the customers select their Airbnb.
+  In this report, I will use multilevel models to analyze Airbnb data. I will limit the location to Los Angeles in California and the data is from the Airbnb website. I will also use crime data during 2010-2019 on Los Angeles Open Data Organization website (Los Angeles Police Department).
+
+# Method
+## Data Cleaning
+Airbnb and crime data were downloaded from each website. I excluded columns that were not related to review scores such as urlFurthermore, I removed not applicable rows. To be specific, there was over 30,000 data in the raw Airbnb data and about 11,000 data was included in the final Airbnb data. For the crime data, I cleaned over 2,000,000 data to about 350,000 data. 
+	
+## EDA and Linear Regression Model
+Figure 1 shows a histogram of cleansed neighborhood groups. Half of the neighborhoods are in the City of Los Angeles, so we can see that the City of Los Angeles is a popular location for the customers. Figure 2 indicates a linear regression model between review scores location and review scores rating. There are outliers, but we can see it has a positive relationship between location scores and review scores rating. 
+	
+
+```{r, echo=FALSE,warning=FALSE}
+#make data frame and omit N/A and empty values
+data_clean <- data.frame(data[1],data[15],data[18],data[26:34],data[36:40],data[51:54],data[56],
+                    data[61:67], data[74])
+data_clean <- data_clean %>% mutate_all(~ifelse(. %in% c("N/A", "null", ""), NA, .)) %>% na.omit()
+data_clean <- data.frame(data_clean)
+```
+
+
+```{r pressure,echo=FALSE,warning=FALSE, fig.cap = "Histogram of cleansed neighborhood group", fig.height=3, fig.width=6}
+count_neighbor <- data_clean %>% count(neighbourhood_group_cleansed)
+ggplot(data_clean)+stat_count(aes(x=neighbourhood_group_cleansed))
+```
+
+```{r,echo=FALSE,warning=FALSE, fig.cap = "Linear regression model between review scores location and review scores rating.", fig.height=3, fig.width=6}
+ggplot(data_clean, aes(x=review_scores_location,y=review_scores_rating))+
+  geom_point(aes(color=review_scores_location))
+```
+
+
+# Results
+
+I used linear mixed effects regression to make model 1 and model 2. Model 1 predictor is neighborhood and model 2 predictor is cleansed neighborhood. Review scores rating include check-in scores, cleanliness scores, accuracy scores, communication scores, location scores, and value scores. I compared the AIC of model 1 and model 2. Model 2 has a smaller AIC and a larger degree of freedom, indicating model 2 is better. To be specific, a smaller AIC means it has a better fit. According to UT Austin, a larger degree of freedom suggests that it has “more power to reject a false null hypothesis and find a significant result” (2015). Therefore, I decided the cleansed neighborhood as a predictor. For the validation, I used residual plots to compare the fitted model and the residual model. We can observe that Figure 3 and Figure 4 have similar plots, meaning model 2 is a proper model for the prediction.
+
+I would like to investigate whether the crime rate is an important aspect for customers to choose Airbnb. I listed 20 locations that have the most highest crime rate and limited the data to Broadway, Hollywood, Sherman, and Wilshire because only those locations are included in the Airbnb dataset. I expected customers to tend to avoid high crime rate locations, but Figure 5 and Figure 6 show that the crime rate did not affect the customers’ ratings on locations.
+
+```{r,echo=FALSE, warning=FALSE}
+#change the values to numeric values
+df_response <- data_clean
+
+df_response$host_response_time[df_response$host_response_time == "a few days or more"] <- "72"
+df_response$host_response_time[df_response$host_response_time == "within a day"] <- "24"
+df_response$host_response_time[df_response$host_response_time == "within a few hours"] <- "5"
+df_response$host_response_time[df_response$host_response_time == "within an hour"] <- "1"
+
+df_response <- data.frame(df_response)
+df_response <- data.frame(df_response)
+```
+
+```{r,echo=FALSE, warning=FALSE}
+# Linear Mixed Effects Regression
+model1 <- lmer(review_scores_rating ~ review_scores_checkin + review_scores_cleanliness + review_scores_accuracy+
+                 review_scores_communication+review_scores_value+review_scores_location +
+                 review_scores_checkin*neighbourhood + review_scores_cleanliness*neighbourhood +
+                 review_scores_accuracy*neighbourhood + review_scores_communication*neighbourhood+
+                 review_scores_value*neighbourhood + review_scores_location*neighbourhood+
+                 (1|neighbourhood), data=df_response)
+
+model2 <- lmer(review_scores_rating ~ review_scores_checkin + review_scores_cleanliness+ review_scores_accuracy+
+                 review_scores_communication+review_scores_value+review_scores_location +
+                 review_scores_checkin*neighbourhood_cleansed + review_scores_cleanliness*neighbourhood_cleansed +
+                 review_scores_accuracy*neighbourhood_cleansed +
+                 review_scores_communication*neighbourhood_cleansed+ review_scores_value*neighbourhood_cleansed+
+                 review_scores_location*neighbourhood_cleansed+ (1|neighbourhood_cleansed), data=df_response)
+```
+
+```{r,echo=FALSE, warning=FALSE, fig.height=3, fig.width=3}
+print(AIC(model1, model2))
+```
+
+```{r,echo=FALSE, warning=FALSE,fig.cap="The visualization of model 2", fig.height=4, fig.width=4}
+plot(model2)
+```
+
+```{r, echo=FALSE, results= FALSE, warning=FALSE}
+ggmodel <- lm(review_scores_rating ~ review_scores_accuracy + review_scores_cleanliness +
+                review_scores_checkin+ review_scores_communication + review_scores_location+
+                review_scores_value, data=df_response)
+```
+
+
+```{r,echo=FALSE, warning=FALSE, fig.cap = "Validation. Residual plots comparing fitted model and residual model", fig.height=4, fig.width=4}
+#Validation
+#fitted vs residual
+res <- resid(ggmodel)
+plot(fitted(ggmodel), res)
+abline(0,0)
+```
+
+
+```{r,echo=FALSE, warning=FALSE}
+# 10 most popular neighborhood locations
+df_location <- df_response[df_response[28]>7,]
+count_loc <- df_location %>% count(neighbourhood_cleansed)
+top_loc <- count_loc %>% top_n(10, n)
+
+```
+
+
+```{r,echo=FALSE, warning=FALSE}
+# cleaning crime data during 2010-2019
+crime <- read.csv("Crimedata.csv")
+crime2 <- data.frame(crime[1],crime[6],crime[25:28])
+crime2 <- crime2 %>% mutate_all(~ifelse(. %in% c("N/A", "null", ""), NA, .)) %>% na.omit()
+crime2 <- data.frame(crime2)
+```
+
+```{r,echo=FALSE, warning=FALSE}
+# Only Broadway, Hollywood, Sherman, Wilshire are in the Airbnb dataset
+count_crime <- crime2 %>% count(LOCATION)
+top_crime <- count_crime %>% top_n(20, n)
+
+```
+
+
+```{r,echo=FALSE, warning=FALSE}
+# Filter data
+Broadway <- filter(df_response, grepl('Broadway', neighbourhood_cleansed))
+Hollywood <- filter(df_response, grepl('Hollywood', neighbourhood_cleansed))
+Sherman <- filter(df_response, grepl('Sherman', neighbourhood_cleansed))
+Wilshire <- filter(df_response, grepl('Wilshire', neighbourhood_cleansed))
+```
+
+
+```{r,echo=FALSE, warning=FALSE, fig.cap= "Linear regression model of Hollywood", fig.height=3, fig.width=6}
+ggplot(Hollywood, aes(x=review_scores_location,y=review_scores_rating))+
+  geom_point(aes(color=review_scores_location))
+```
+
+```{r,echo=FALSE, warning=FALSE, fig.cap= "Linear regression model of Wilshire",fig.height=3, fig.width=6}
+ggplot(Wilshire, aes(x=review_scores_location,y=review_scores_rating))+
+  geom_point(aes(color=review_scores_location))
+
+```
+
+
+# Discussion 
+
+Model 2 has a smaller AIC and a larger degree of freedom, indicating model 2 is better. To be specific, a smaller AIC means it has a better fit. A larger degree of freedom suggests that it has “more power to reject a false null hypothesis and find a significant result” (UT Austin, 2015). Therefore, I chose model 2 to validate my model.
+For the validation, we can observe that Figure 3 and Figure 4 have similar plots, meaning model 2 is a proper model for the prediction. I would like to investigate whether the crime rate is an important aspect for customers to choose Airbnb. I expected customers to tend to avoid high crime rate locations. Additionally, I thought customers would not be satisfied with their Airbnb located in Broadway, Hollywood, Sherman, and Wilshire. However, there was no significant relationship between the crime rate and review scores.
+In future research, I will figure out how customers choose their Airbnb locations because in this report I found the crime rate is not an important aspect. The customers might select locations near to public transportations, tourist attractions, or price. Not limited to locations, I will investigate how other aspects such as a type of Airbnb impact their selections. 
+
+# Bibliography
+
+Airbnb. insideairbnb.com/get-the-data.html.
+
+Andrew Gelman and Yu-Sung Su (2020). arm: Data Analysis Using Regression and
+  Multilevel/Hierarchical Models. R package version 1.11-2.
+  https://CRAN.R-project.org/package=arm
+  
+Douglas Bates, Martin Maechler, Ben Bolker, Steve Walker (2015). Fitting Linear Mixed-Effects
+  Models Using lme4. Journal of Statistical Software, 67(1), 1-48. doi:10.18637/jss.v067.i01.
+  
+H. Wickham. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York, 2016.
+
+Hadley Wickham (2019). stringr: Simple, Consistent Wrappers for Common String Operations. R
+  package version 1.4.0. https://CRAN.R-project.org/package=stringr
+  
+Hadley Wickham, Romain François, Lionel Henry and Kirill Müller (2020). dplyr: A Grammar of
+  Data Manipulation. R package version 1.0.2. https://CRAN.R-project.org/package=dplyr
+  
+Jared E. Knowles and Carl Frederick (2020). merTools: Tools for Analyzing Mixed Effect
+  Regression Models. R package version 0.5.2. https://CRAN.R-project.org/package=merTools
+  
+Los Angeles Police Department. Los Angeles Open Data, data.lacity.org/Public-Safety/Crime-Data-from-2010-to-2019/63jg-8b9z.
+
+Stan Development Team (2020). RStan: the R interface to Stan. R package version 2.21.2.
+  http://mc-stan.org/.
+  
+Statistics Online Support, The University of Texas at Austin, sites.utexas.edu/sos/degreesfreedom/.
+
+Van P, Jiang W, Gottardo R, Finak G (2018). “ggcyto: Next-generation open-source visualization
+  software for cytometry.” _Bioinformatics_. <URL: https://doi.org/10.1093/bioinformatics/bty441>.
+  
+Wickham et al., (2019). Welcome to the tidyverse. Journal of Open Source Software, 4(43),
+  1686, https://doi.org/10.21105/joss.01686
+
+
+# Appendix
+```{r,echo=FALSE,warning=FALSE, fig.cap = "Counting the number of superhost and non-superhost.", fig.height=2, fig.width=3}
+# There was no difference in superhost and non-superhost
+ggplot(data=data_clean, mapping= aes(x=host_is_superhost, y=id))+geom_point()
+
+```
+
+```{r,echo=FALSE, warning=FALSE, fig.cap= "Relationship between host response time and review scores rating", fig.height=3, fig.width=4}
+# response time is not an important aspect.
+model1 <- lm(review_scores_rating ~ host_response_time , data=df_response)
+coef_model1 <- data.frame(coef(model1))
+df_response %>% arrange(review_scores_rating) %>%
+  mutate(host_response_time=factor(host_response_time, levels=c("1", "5","24","72"))) %>%
+  ggplot(aes(x=host_response_time, y=review_scores_rating,
+                               color=host_response_time))+
+  geom_point()+geom_smooth(method="lm", se=FALSE, size=0.5)+theme(legend.position = "none")
+```
+
+
+```{r,echo=FALSE, warning=FALSE, fig.cap= "Linear model shows how accuracy, cleanliness, check-in, communication, location, and value affects review scores rating", fig.height=3, fig.width=6}
+ggplot(data=df_response, aes(x=review_scores_accuracy + review_scores_cleanliness +
+                review_scores_checkin+ review_scores_communication + review_scores_location+
+                review_scores_value, y= review_scores_rating))+
+  geom_point(aes(color=review_scores_rating))
+```
+
+```{r,echo=FALSE, warning=FALSE, fig.cap= "Linear regression model of Broadway", fig.height=3, fig.width=6}
+ggplot(Broadway, aes(x=review_scores_location,y=review_scores_rating))+
+  geom_point(aes(color=review_scores_location))
+```
+
+```{r,echo=FALSE, warning=FALSE, fig.cap= "Linear regression model of Sherman",fig.height=3, fig.width=6}
+ggplot(Sherman, aes(x=review_scores_location,y=review_scores_rating))+
+  geom_point(aes(color=review_scores_location))
+```
